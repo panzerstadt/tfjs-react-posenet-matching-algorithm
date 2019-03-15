@@ -49,12 +49,12 @@ const calculatePoseDomain = pose => {
 };
 
 const findClosestPoses = (
-  pose,
-  index,
+  currentIndex,
   poseSet,
   count = 5,
   includeDist = false
 ) => {
+  const index = currentIndex;
   // find n closest poses compared to input pose and its index
   const split = Math.round(count / 2);
   // the first item in leftHalf is the current index
@@ -86,14 +86,18 @@ const vectorizePose = (pose, resize = true) => {
 
   if (!pose || pose.length === 0) return [];
 
-  const keypoints = pose.keypoints.sort((a, b) => {
-    const x = a.part;
-    const y = b.part;
+  // maintain pose order
+  // WARNING: this actually screws up the skeleton drawing function
+  // from posenet
+  // const keypoints = pose.keypoints.sort((a, b) => {
+  //   const x = a.part;
+  //   const y = b.part;
 
-    if (x < y) return -1;
-    if (x > y) return 1;
-    return 0;
-  });
+  //   if (x < y) return -1;
+  //   if (x > y) return 1;
+  //   return 0;
+  // });
+  const keypoints = pose.keypoints;
 
   // resize == remap x and y to 0 to 1
   if (resize) {
@@ -326,33 +330,43 @@ export default class PoseMatch extends Component {
 
   calculatePoseSimilarity() {
     const PENALTY = 0.001;
+    const currentPose = this.state.pose2;
 
     const out = findClosestPoses(
-      this.state.pose2,
       this.state.currentFrame,
       this.state.allPoses1,
       this.state.framesToCompare,
       true
     ).map((v, i) => {
-      const t = vectorizePose(v.pose, true);
+      if (v.pose) {
+        const t = vectorizePose(v.pose, true);
 
-      const sim =
-        t.length > 0 && this.state.pose2.length > 0
-          ? cosineSimilarity(t, this.state.pose2).toFixed(4)
-          : 0;
+        const sim =
+          t.length > 0 && currentPose.length > 0
+            ? cosineSimilarity(t, currentPose).toFixed(4)
+            : 0;
 
-      // weighted by score
-      const weightedSim = v.pose.score * sim;
-      // penalized by distance from current frame
-      const finalSim = weightedSim - v.distance * PENALTY;
+        // weighted by score
+        const weightedSim = v.pose.score * sim;
+        // penalized by distance from current frame
+        const finalSim = weightedSim - v.distance * PENALTY;
 
-      return {
-        distance: v.distance,
-        score: finalSim,
-        cosineSimilarity: sim,
-        weightedSimilarity: weightedSim,
-        index: v.index
-      };
+        return {
+          distance: v.distance,
+          score: finalSim,
+          cosineSimilarity: sim,
+          weightedSimilarity: weightedSim,
+          index: v.index
+        };
+      } else {
+        return {
+          distance: 1,
+          score: 0,
+          cosineSimilarity: 0,
+          weightedSimilarity: 0,
+          index: v.index
+        };
+      }
     });
 
     const highest = out
